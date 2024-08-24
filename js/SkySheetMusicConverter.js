@@ -116,6 +116,7 @@ function processInput() {
   document.getElementById("result").innerText = output;
   console.log("轉換輸出:", output);
 }
+//複製結果
 function copyToClipboard() {
   const resultText = document.getElementById("result").innerText;
   navigator.clipboard
@@ -126,4 +127,8 @@ function copyToClipboard() {
     .catch((err) => {
       console.error("複製失敗:", err);
     });
+}
+//一鍵清除
+function clearInput() {
+  document.getElementById("userInput").value = "";
 }
