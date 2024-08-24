@@ -5,18 +5,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sky樂譜轉換器</title>
+    <link rel="stylesheet" href="./css/PhoneHover.css">
+    <script src="./js/PhoneHover.js" defer></script>
     <script src="./js/SkySheetMusicConverter.js" defer></script>
 </head>
 
 <body>
     <div class="flex justify-center w-full">
         <div>
-            <h1>輸入Sky Studio格式樂譜</h1>
-            <div>
-                <label for="userInput">輸入:</label>
-            </div>
-            <textarea type="text" id="userInput" placeholder="輸入要轉換的樂譜" rows="10" cols="50"></textarea><br><br>
+            <h1>
+                輸入
+                <span class="jump-letter">Sky</span>
+                <span class="jump-letter"> </span>
+                <span class="jump-letter">Studio</span>
+                格式樂譜
+            </h1>
+            <label for="userInput">輸入:</label>
+            <textarea type="text" id="userInput" placeholder="輸入要轉換的樂譜" rows="10" cols="40"></textarea><br><br>
             <button type="button" onclick="processInput()">送出</button>
+            <button type="button" onclick="copyToClipboard()">複製結果</button>
+        </div>
+        <div id="output" class="flex w-[300px]">
+            <h2>轉換結果:</h2>
+            <p id="result" class="flex w-[200px]"></p>
         </div>
     </div>
 </body>

@@ -113,5 +113,17 @@ function processInput() {
       output += inputChars[i];
     }
   }
+  document.getElementById("result").innerText = output;
   console.log("轉換輸出:", output);
+}
+function copyToClipboard() {
+  const resultText = document.getElementById("result").innerText;
+  navigator.clipboard
+    .writeText(resultText)
+    .then(() => {
+      alert("結果已複製到剪貼簿!");
+    })
+    .catch((err) => {
+      console.error("複製失敗:", err);
+    });
 }

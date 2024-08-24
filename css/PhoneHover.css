@@ -1,0 +1,57 @@
+@import url("https://fonts.googleapis.com/css2?family=Matemasie&display=swap");
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100dvh;
+  font-family: "Matemasie", sans-serif;
+  font-weight: 400;
+  font-style: normal;
+}
+
+.jump-letter {
+  display: inline-block;
+  padding: 0 4px;
+  font-size: 2rem;
+  transform-origin: center bottom;
+  cursor: default;
+}
+
+.jump-letter.active {
+  animation: jump 1.5s 0s cubic-bezier(0.165, 0.85, 0.45, 1);
+}
+#result {
+  font-family: Arial, sans-serif; /* 設定轉換結果使用其他字型 */
+}
+@media (max-width: 540px) {
+  .jump-letter {
+    font-size: 2rem;
+  }
+}
+
+@keyframes jump {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+    color: blue;
+  }
+
+  25%,
+  75% {
+    transform: translateY(0) scale(1.2, 0.8);
+    text-shadow: -5px 5px 5px rgba(0, 0, 0, 0.5);
+    color: blue;
+  }
+
+  50% {
+    transform: translateY(-50px) scale(0.8, 1.2);
+    color: #54afe8;
+  }
+}
