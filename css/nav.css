@@ -1,0 +1,40 @@
+/* nav.css — 共用頂部導覽列 */
+
+.site-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1000;
+    background-color: #1a1a2e;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.site-nav ul {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.site-nav ul li a {
+    display: block;
+    padding: 14px 24px;
+    color: #c9d1d9;
+    text-decoration: none;
+    font-family: "Matemasie", "Noto Sans TC", sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.site-nav ul li a:hover {
+    background-color: #2d2d52;
+    color: #ffffff;
+}
+
+.site-nav ul li a.active {
+    background-color: #0f3460;
+    color: #e2e2e2;
+    font-weight: bold;
+}
