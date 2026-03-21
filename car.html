@@ -43,9 +43,6 @@
 
         .dot {
             position: absolute;
-            width: 12px;
-            height: 12px;
-            background-color: rgba(255, 255, 255, 0.4);
             border-radius: 50%;
         }
     </style>
@@ -60,53 +57,91 @@
         const startBtn = document.getElementById('start-btn');
         const container = document.getElementById('dots-container');
 
-        const DOT_SIZE_MIN = 6;   // px
-        const DOT_SIZE_MAX = 24;  // px
-        const DOT_SIZE_DEFAULT = 12; // px
-        const SPACING = 60;       // 等距間距 px
-        const SIDE_X_LEFT = 0.07; // 左側 X 位置（螢幕寬度比例）
-        const SIDE_X_RIGHT = 0.93; // 右側 X 位置
-        const DRIFT_SPEED = 0.3;  // 每幀漂移速度係數
+        // 動態點常數
+        const DYN_SIZE_MIN = 8;    // px
+        const DYN_SIZE_MAX = 28;   // px
+        const GRID_SPACING = 80;   // 格狀間距 px
 
-        let dots = [];
+        // 固定點常數
+        const FIX_SIZE_MIN = 12;   // px
+        const FIX_SIZE_MAX = 32;   // px
+        const FIXED_COUNT = 5;     // 每側顆數
+
+        const SIDE_X_LEFT  = 0.07; // 左側 X 位置（螢幕寬度比例）
+        const SIDE_X_RIGHT = 0.93; // 右側 X 位置
+        const FIX_MICRO_COEFF = 0.05; // 固定點微動係數
+        const FIX_MICRO_MAX  = 8;     // 固定點微動最大偏移 px
+
+        const DRIFT_SPEED    = 0.3;   // 動態點每幀漂移係數
+        const MAX_ROT_SPEED  = 200;   // 最大旋轉速度 deg/s
+
+        let dynamicDots = [];
+        let fixedDots   = [];
         let rotRate = { alpha: 0, beta: 0, gamma: 0 };
+
+        // 動態點全局累積偏移量（使用模數確保均勻分布）
+        let offsetX = 0;
+        let offsetY = 0;
+        let gridCols = 0;
+        let gridRows = 0;
+
         let animFrameId = null;
 
         function createDots() {
             container.innerHTML = '';
-            dots = [];
+            dynamicDots = [];
+            fixedDots   = [];
+            offsetX = 0;
+            offsetY = 0;
 
-            const screenH = window.innerHeight;
             const screenW = window.innerWidth;
-            const count = Math.floor(screenH / SPACING) + 1;
+            const screenH = window.innerHeight;
 
-            for (let side = 0; side < 2; side++) {
-                const xRatio = side === 0 ? SIDE_X_LEFT : SIDE_X_RIGHT;
-                const xPx = screenW * xRatio;
+            // --- 動態點：格狀佈滿全版面 ---
+            gridCols = Math.ceil(screenW / GRID_SPACING) + 1;
+            gridRows = Math.ceil(screenH / GRID_SPACING) + 1;
 
-                for (let i = 0; i < count; i++) {
-                    const yPx = i * SPACING;
+            for (let row = 0; row < gridRows; row++) {
+                for (let col = 0; col < gridCols; col++) {
+                    const baseX = col * GRID_SPACING;
+                    const baseY = row * GRID_SPACING;
 
                     const dot = document.createElement('div');
                     dot.className = 'dot';
-
-                    const dotData = {
-                        el: dot,
-                        originX: xPx,
-                        originY: yPx,
-                        x: xPx,
-                        y: yPx,
-                        size: DOT_SIZE_DEFAULT
-                    };
-
-                    dot.style.left = xPx + 'px';
-                    dot.style.top = yPx + 'px';
-                    dot.style.width = DOT_SIZE_DEFAULT + 'px';
-                    dot.style.height = DOT_SIZE_DEFAULT + 'px';
+                    dot.style.width  = DYN_SIZE_MIN + 'px';
+                    dot.style.height = DYN_SIZE_MIN + 'px';
+                    dot.style.backgroundColor = 'rgba(255, 255, 255, 0.2)';
                     dot.style.transform = 'translate(-50%, -50%)';
+                    dot.style.left = baseX + 'px';
+                    dot.style.top  = baseY + 'px';
 
                     container.appendChild(dot);
-                    dots.push(dotData);
+                    dynamicDots.push({ el: dot, baseX, baseY });
+                }
+            }
+
+            // --- 固定點：左右各 5 顆，Y 軸在 20%～80% 均勻分布 ---
+            const yTop    = screenH * 0.2;
+            const yBottom = screenH * 0.8;
+            const yStep   = FIXED_COUNT > 1 ? (yBottom - yTop) / (FIXED_COUNT - 1) : 0;
+
+            for (let side = 0; side < 2; side++) {
+                const baseX = screenW * (side === 0 ? SIDE_X_LEFT : SIDE_X_RIGHT);
+
+                for (let i = 0; i < FIXED_COUNT; i++) {
+                    const baseY = yTop + i * yStep;
+
+                    const dot = document.createElement('div');
+                    dot.className = 'dot';
+                    dot.style.width  = FIX_SIZE_MIN + 'px';
+                    dot.style.height = FIX_SIZE_MIN + 'px';
+                    dot.style.backgroundColor = 'rgba(255, 255, 255, 0.85)';
+                    dot.style.transform = 'translate(-50%, -50%)';
+                    dot.style.left = baseX + 'px';
+                    dot.style.top  = baseY + 'px';
+
+                    container.appendChild(dot);
+                    fixedDots.push({ el: dot, baseX, baseY });
                 }
             }
         }
@@ -152,42 +187,54 @@
             });
 
             function animate() {
-                const screenW = window.innerWidth;
-                const screenH = window.innerHeight;
-
-                // 旋轉速率合力（用於決定圓點大小）
+                // 旋轉速率合力（用於決定圓點大小與透明度）
                 const rotSpeed = Math.sqrt(
                     rotRate.alpha * rotRate.alpha +
                     rotRate.beta  * rotRate.beta  +
                     rotRate.gamma * rotRate.gamma
                 );
+                const t = Math.min(rotSpeed / MAX_ROT_SPEED, 1);
 
-                // 映射到 6px ~ 24px，最大速度設定為 200 deg/s
-                const maxRotSpeed = 200;
-                const t = Math.min(rotSpeed / maxRotSpeed, 1);
-                const newSize = DOT_SIZE_MIN + t * (DOT_SIZE_MAX - DOT_SIZE_MIN);
+                // 動態點大小與透明度
+                const dynSize    = DYN_SIZE_MIN + t * (DYN_SIZE_MAX - DYN_SIZE_MIN);
+                const dynOpacity = 0.2 + t * 0.8;
 
-                // 漂移方向：beta（前後傾斜）→ Y，gamma（左右傾斜）→ X
-                const driftX = rotRate.gamma * DRIFT_SPEED;
-                const driftY = rotRate.beta  * DRIFT_SPEED;
+                // 固定點大小（透明度固定）
+                const fixSize = FIX_SIZE_MIN + t * (FIX_SIZE_MAX - FIX_SIZE_MIN);
 
-                dots.forEach(d => {
-                    // 累積漂移
-                    d.x += driftX;
-                    d.y += driftY;
+                // 累積全局漂移偏移量（gamma → X，beta → Y）
+                offsetX += rotRate.gamma * DRIFT_SPEED;
+                offsetY += rotRate.beta  * DRIFT_SPEED;
 
-                    // 卷回（wrap around）
-                    if (d.x < -newSize) d.x = screenW + newSize;
-                    if (d.x > screenW + newSize) d.x = -newSize;
-                    if (d.y < -newSize) d.y = screenH + newSize;
-                    if (d.y > screenH + newSize) d.y = -newSize;
+                // 模數範圍（確保均勻分布、不疊加）
+                const totalW = gridCols * GRID_SPACING;
+                const totalH = gridRows * GRID_SPACING;
 
-                    // 更新尺寸
-                    d.size = newSize;
-                    d.el.style.width  = newSize + 'px';
-                    d.el.style.height = newSize + 'px';
-                    d.el.style.left   = d.x + 'px';
-                    d.el.style.top    = d.y + 'px';
+                // 正規化全局偏移量至 [0, total) 範圍，減少每個圓點的重複計算
+                offsetX = ((offsetX % totalW) + totalW) % totalW;
+                offsetY = ((offsetY % totalH) + totalH) % totalH;
+
+                // 更新動態點
+                dynamicDots.forEach(d => {
+                    const displayX = (d.baseX + offsetX) % totalW;
+                    const displayY = (d.baseY + offsetY) % totalH;
+
+                    d.el.style.left            = displayX + 'px';
+                    d.el.style.top             = displayY + 'px';
+                    d.el.style.width           = dynSize + 'px';
+                    d.el.style.height          = dynSize + 'px';
+                    d.el.style.backgroundColor = `rgba(255, 255, 255, ${dynOpacity})`;
+                });
+
+                // 更新固定點（原地微動，偏移限制在 ±8px）
+                fixedDots.forEach(d => {
+                    const microX = Math.max(-FIX_MICRO_MAX, Math.min(FIX_MICRO_MAX, rotRate.gamma * FIX_MICRO_COEFF));
+                    const microY = Math.max(-FIX_MICRO_MAX, Math.min(FIX_MICRO_MAX, rotRate.beta  * FIX_MICRO_COEFF));
+
+                    d.el.style.left   = (d.baseX + microX) + 'px';
+                    d.el.style.top    = (d.baseY + microY) + 'px';
+                    d.el.style.width  = fixSize + 'px';
+                    d.el.style.height = fixSize + 'px';
                 });
 
                 animFrameId = requestAnimationFrame(animate);
