@@ -8,7 +8,7 @@
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #1a1a1a; /* 深色模式背景，減少刺眼 */
+            background-color: #1a1a1a;
             color: white;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             display: flex;
@@ -47,7 +47,6 @@
             height: 12px;
             background-color: rgba(255, 255, 255, 0.4);
             border-radius: 50%;
-            transition: transform 0.1s cubic-bezier(0.25, 0.46, 0.45, 0.94);
         }
     </style>
 </head>
@@ -60,60 +59,141 @@
     <script>
         const startBtn = document.getElementById('start-btn');
         const container = document.getElementById('dots-container');
-        const dots = [];
 
-        // 隨機在螢幕兩側邊緣生成 40 個視覺點
-        for (let i = 0; i < 40; i++) {
-            let dot = document.createElement('div');
-            dot.className = 'dot';
-            // 分佈於左右各 15% 的區域內
-            let isLeft = Math.random() > 0.5;
-            dot.style.left = isLeft ? (Math.random() * 15) + 'vw' : (85 + Math.random() * 15) + 'vw';
-            dot.style.top = Math.random() * 100 + 'vh';
-            container.appendChild(dot);
-            dots.push(dot);
+        const DOT_SIZE_MIN = 6;   // px
+        const DOT_SIZE_MAX = 24;  // px
+        const DOT_SIZE_DEFAULT = 12; // px
+        const SPACING = 60;       // 等距間距 px
+        const SIDE_X_LEFT = 0.07; // 左側 X 位置（螢幕寬度比例）
+        const SIDE_X_RIGHT = 0.93; // 右側 X 位置
+        const DRIFT_SPEED = 0.3;  // 每幀漂移速度係數
+
+        let dots = [];
+        let rotRate = { alpha: 0, beta: 0, gamma: 0 };
+        let animFrameId = null;
+
+        function createDots() {
+            container.innerHTML = '';
+            dots = [];
+
+            const screenH = window.innerHeight;
+            const screenW = window.innerWidth;
+            const count = Math.floor(screenH / SPACING) + 1;
+
+            for (let side = 0; side < 2; side++) {
+                const xRatio = side === 0 ? SIDE_X_LEFT : SIDE_X_RIGHT;
+                const xPx = screenW * xRatio;
+
+                for (let i = 0; i < count; i++) {
+                    const yPx = i * SPACING;
+
+                    const dot = document.createElement('div');
+                    dot.className = 'dot';
+
+                    const dotData = {
+                        el: dot,
+                        originX: xPx,
+                        originY: yPx,
+                        x: xPx,
+                        y: yPx,
+                        size: DOT_SIZE_DEFAULT
+                    };
+
+                    dot.style.left = xPx + 'px';
+                    dot.style.top = yPx + 'px';
+                    dot.style.width = DOT_SIZE_DEFAULT + 'px';
+                    dot.style.height = DOT_SIZE_DEFAULT + 'px';
+                    dot.style.transform = 'translate(-50%, -50%)';
+
+                    container.appendChild(dot);
+                    dots.push(dotData);
+                }
+            }
         }
 
+        createDots();
+        window.addEventListener('resize', createDots);
+
         startBtn.addEventListener('click', async () => {
-            // iOS 13+ 需要使用者明確點擊並授權 DeviceMotion 權限
-            if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                try {
-                    const permission = await DeviceMotionEvent.requestPermission();
-                    if (permission === 'granted') {
-                        startTracking();
-                    } else {
+            const needsMotionPerm = typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function';
+            const needsOrientPerm = typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function';
+
+            try {
+                if (needsMotionPerm) {
+                    const perm = await DeviceMotionEvent.requestPermission();
+                    if (perm !== 'granted') {
                         alert('需要允許動作感測器權限，才能追蹤車輛移動喔！');
+                        return;
                     }
-                } catch (error) {
-                    console.error('授權失敗:', error);
                 }
-            } else {
-                // 非 iOS 13+ 裝置直接啟用
-                startTracking();
+                if (needsOrientPerm) {
+                    const perm2 = await DeviceOrientationEvent.requestPermission();
+                    if (perm2 !== 'granted') {
+                        alert('需要允許方向感測器權限，才能追蹤旋轉速率喔！');
+                        return;
+                    }
+                }
+            } catch (error) {
+                console.error('授權失敗:', error);
+                return;
             }
+
+            startTracking();
         });
 
         function startTracking() {
             startBtn.style.display = 'none';
 
             window.addEventListener('devicemotion', (event) => {
-                // 取得 X 和 Y 軸的加速度 (不含重力影響)，若 acceleration 為 null 則使用 0
-                let acc = event.acceleration;
-                let accX = (acc && acc.x) ? acc.x : 0;
-                let accY = (acc && acc.y) ? acc.y : 0;
-
-                // 將加速度轉換為螢幕上的像素位移 (數值可依實機測試感受調整)
-                // 加入最大/最小限制，避免點點飛出螢幕
-                let moveX = Math.max(-60, Math.min(60, accX * -8));
-                let moveY = Math.max(-60, Math.min(60, accY * 8));
-
-                // 即時更新所有點點的 transform 屬性
-                requestAnimationFrame(() => {
-                    dots.forEach(dot => {
-                        dot.style.transform = `translate(${moveX}px, ${moveY}px)`;
-                    });
-                });
+                const rr = event.rotationRate;
+                rotRate.alpha = (rr && rr.alpha) ? rr.alpha : 0;
+                rotRate.beta  = (rr && rr.beta)  ? rr.beta  : 0;
+                rotRate.gamma = (rr && rr.gamma)  ? rr.gamma : 0;
             });
+
+            function animate() {
+                const screenW = window.innerWidth;
+                const screenH = window.innerHeight;
+
+                // 旋轉速率合力（用於決定圓點大小）
+                const rotSpeed = Math.sqrt(
+                    rotRate.alpha * rotRate.alpha +
+                    rotRate.beta  * rotRate.beta  +
+                    rotRate.gamma * rotRate.gamma
+                );
+
+                // 映射到 6px ~ 24px，最大速度設定為 200 deg/s
+                const maxRotSpeed = 200;
+                const t = Math.min(rotSpeed / maxRotSpeed, 1);
+                const newSize = DOT_SIZE_MIN + t * (DOT_SIZE_MAX - DOT_SIZE_MIN);
+
+                // 漂移方向：beta（前後傾斜）→ Y，gamma（左右傾斜）→ X
+                const driftX = rotRate.gamma * DRIFT_SPEED;
+                const driftY = rotRate.beta  * DRIFT_SPEED;
+
+                dots.forEach(d => {
+                    // 累積漂移
+                    d.x += driftX;
+                    d.y += driftY;
+
+                    // 卷回（wrap around）
+                    if (d.x < -newSize) d.x = screenW + newSize;
+                    if (d.x > screenW + newSize) d.x = -newSize;
+                    if (d.y < -newSize) d.y = screenH + newSize;
+                    if (d.y > screenH + newSize) d.y = -newSize;
+
+                    // 更新尺寸
+                    d.size = newSize;
+                    d.el.style.width  = newSize + 'px';
+                    d.el.style.height = newSize + 'px';
+                    d.el.style.left   = d.x + 'px';
+                    d.el.style.top    = d.y + 'px';
+                });
+
+                animFrameId = requestAnimationFrame(animate);
+            }
+
+            animFrameId = requestAnimationFrame(animate);
         }
     </script>
 </body>
