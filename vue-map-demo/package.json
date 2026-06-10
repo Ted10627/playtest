@@ -1,0 +1,22 @@
+{
+  "name": "vue-map-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vue 3 示範：網頁嵌入地圖（Leaflet / Google Maps），多地點標記 + food/parking/bus-stop 按鈕篩選互動",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@googlemaps/js-api-loader": "^1.16.8",
+    "leaflet": "^1.9.4",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^6.0.7"
+  }
+}
