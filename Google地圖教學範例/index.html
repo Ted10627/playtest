@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google 地圖範例：多標記 + 按鈕篩選</title>
+
+  <!-- 可先略過 CSS，重點放在下面的 JavaScript -->
+  <!-- 版面是上方一排篩選按鈕，下方一張全幅地圖 -->
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      font-family: "Noto Sans TC", system-ui, sans-serif;
+    }
+
+    /* 整個畫面用上下排列，按鈕列在上、地圖在下 */
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    /* 上方按鈕列 */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #fff;
+      border-bottom: 1px solid #e9ecef;
+    }
+
+    .filter-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border: 1.5px solid #ced4da;
+      border-radius: 999px;
+      background: #f8f9fa;
+      color: #495057;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+
+    .filter-btn:hover {
+      transform: translateY(-1px);
+    }
+
+    /* active 是按鈕被選中的狀態，背景色由 JS 依分類顏色帶入 */
+    .filter-btn.active {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    #count {
+      margin-left: auto;
+      font-size: 14px;
+      color: #868e96;
+    }
+
+    /* 地圖用 flex:1 把剩下的高度全部吃滿 */
+    #map {
+      flex: 1;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <!-- 按鈕列，這三顆按鈕會在 JS 載入後自動產生，所以這裡先留空 -->
+    <div id="toolbar">
+      <div id="buttons"></div>
+      <span id="count"></span>
+    </div>
+
+    <!-- 地圖容器，Google 地圖會被畫進這個 div 裡 -->
+    <div id="map"></div>
+  </div>
+
+  <!-- JavaScript 主程式，只做三件事 -->
+  <!-- 一是把地圖畫出來，二是放多個帶分類的標記，三是按鈕切換時只顯示被選中分類的標記 -->
+  <script>
+    // 步驟 1，準備分類與地點資料
+    // 三種分類，各自有顯示文字與顏色
+    // key 是程式內部用的代號，必須對應這裡的 key
+    const categories = {
+      food: { label: "美食 Food", color: "#e8590c" },
+      parking: { label: "停車 Parking", color: "#1971c2" },
+      "bus-stop": { label: "公車 Bus stop", color: "#2f9e44" },
+    };
+
+    // 地點清單，實務上這份資料通常來自後端 API 或資料庫
+    // 這裡為了教學直接寫死，每筆要有名稱、分類、緯度 lat、經度 lng
+    const places = [
+      { name: "永康牛肉麵", category: "food", lat: 25.0329, lng: 121.5295 },
+      { name: "鼎泰豐 信義店", category: "food", lat: 25.0331, lng: 121.5325 },
+      { name: "阜杭豆漿", category: "food", lat: 25.0444, lng: 121.5247 },
+      { name: "誠品信義停車場", category: "parking", lat: 25.0398, lng: 121.5654 },
+      { name: "大安森林公園停車場", category: "parking", lat: 25.0297, lng: 121.5354 },
+      { name: "台北車站停車場", category: "parking", lat: 25.0478, lng: 121.5170 },
+      { name: "捷運大安站公車", category: "bus-stop", lat: 25.0335, lng: 121.5436 },
+      { name: "台大醫院站公車", category: "bus-stop", lat: 25.0410, lng: 121.5170 },
+      { name: "市政府站公車", category: "bus-stop", lat: 25.0410, lng: 121.5650 },
+    ];
+
+    // 這些變數會在後面用到，先宣告在最外層讓各 function 都拿得到
+    let map; // 地圖物件
+    let infoWindow; // 點標記後跳出的小視窗
+    const markers = []; // 存放所有標記，方便之後顯示或隱藏
+    const activeCategories = new Set(Object.keys(categories)); // 目前開啟中的分類，預設全開
+
+    // 步驟 2，initMap 會在 Google 地圖載入完成後被自動呼叫
+    // 看最底下 script 標籤的 callback=initMap，就是指定這個進入點
+    function initMap() {
+      // 建立地圖，指定畫在哪個 div、中心點座標、縮放等級
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 25.038, lng: 121.535 }, // 台北市中心附近
+        zoom: 13, // 數字越大越近
+        mapId: "DEMO_MAP_ID", // 新版標記 AdvancedMarkerElement 一定要有 mapId，測試用 DEMO_MAP_ID 即可
+        mapTypeControl: false, // 關掉地圖與衛星切換鈕，畫面乾淨些
+        streetViewControl: false, // 關掉小黃人街景
+      });
+
+      // 建立一個共用的資訊視窗，點不同標記時重複使用同一個
+      infoWindow = new google.maps.InfoWindow();
+
+      // 從 marker 函式庫取出新版標記與彩色圖釘元件
+      const { AdvancedMarkerElement, PinElement } = google.maps.marker;
+
+      // 把每一筆地點都做成一個標記，放進地圖
+      places.forEach((place) => {
+        const cat = categories[place.category];
+
+        // 用官方 PinElement 做出彩色圖釘，取代以前手刻的 SVG 圖示
+        const pin = new PinElement({
+          background: cat.color, // 圖釘底色
+          borderColor: "#ffffff", // 邊框色
+          glyphColor: "#ffffff", // 中間圖示色
+        });
+
+        const marker = new AdvancedMarkerElement({
+          position: { lat: place.lat, lng: place.lng }, // 標記座標
+          map: map, // 放到哪張地圖
+          title: place.name, // 滑鼠移上去顯示的名稱
+          content: pin.element, // 標記長相由這個 DOM 元素決定
+          gmpClickable: true, // 讓標記可以被點擊
+        });
+
+        // 點標記就在資訊視窗顯示名稱與分類
+        marker.addListener("click", () => {
+          infoWindow.setContent(
+            `<strong>${place.name}</strong><br>${cat.label}`
+          );
+          infoWindow.open({ map, anchor: marker }); // 新版開啟資訊視窗的寫法
+        });
+
+        // 把標記和它的分類一起記起來，篩選時要用
+        markers.push({ marker, category: place.category });
+      });
+
+      // 產生上方的篩選按鈕，並先畫一次，此時全部分類都開著
+      buildButtons();
+      applyFilter();
+    }
+
+    // 步驟 3，篩選邏輯，按鈕的核心
+    // 產生三顆按鈕，點下去就切換該分類的開或關
+    function buildButtons() {
+      const box = document.getElementById("buttons");
+      Object.entries(categories).forEach(([key, cat]) => {
+        const btn = document.createElement("button");
+        btn.className = "filter-btn";
+        btn.textContent = cat.label;
+        btn.dataset.key = key;
+
+        btn.addEventListener("click", () => {
+          // 已開啟就關掉，已關閉就打開，這就是切換 toggle
+          if (activeCategories.has(key)) {
+            activeCategories.delete(key);
+          } else {
+            activeCategories.add(key);
+          }
+          applyFilter(); // 狀態改了，重新套用一次篩選
+        });
+
+        box.appendChild(btn);
+      });
+    }
+
+    // 依目前開啟的分類，決定每個標記要顯示或隱藏
+    function applyFilter() {
+      let visibleCount = 0;
+
+      markers.forEach(({ marker, category }) => {
+        const show = activeCategories.has(category);
+        // 新版標記用 marker.map 控制顯示或隱藏，給地圖就顯示，給 null 就隱藏
+        marker.map = show ? map : null;
+        if (show) visibleCount++;
+      });
+
+      // 同步按鈕外觀，被選中的按鈕上色
+      document.querySelectorAll(".filter-btn").forEach((btn) => {
+        const key = btn.dataset.key;
+        const on = activeCategories.has(key);
+        btn.classList.toggle("active", on);
+        btn.style.backgroundColor = on ? categories[key].color : "";
+        btn.style.borderColor = on ? categories[key].color : "";
+      });
+
+      // 更新右上角的數量文字
+      document.getElementById("count").textContent = `顯示 ${visibleCount} 個地點`;
+    }
+
+    // 讓 Google 的 callback 找得到 initMap，掛到全域
+    window.initMap = initMap;
+  </script>
+
+  <!-- 載入 Google 地圖，這一行是關鍵 -->
+  <!-- key 後面是免費的測試用 demo key，有每日用量上限、僅供開發測試 -->
+  <!-- 正式上線請改用自己申請、綁定計費帳號的金鑰 -->
+  <!-- libraries=marker 代表載入新版標記 AdvancedMarkerElement 所在的函式庫 -->
+  <!-- callback=initMap 代表地圖程式庫載入完成後，自動呼叫上面的 initMap -->
+  <!-- async 代表非同步載入，不卡住網頁 -->
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC65_lbZD3TNbRRD2OGZxjjkKlOuTqVlRA&libraries=marker&callback=initMap">
+  </script>
+</body>
+
+</html>
