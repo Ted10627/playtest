@@ -23,6 +23,32 @@ const SPRITES = {
     '.kssssssk.',
     '..kkkkkk..',
   ],
+  // 替換造型 1：草帽
+  head1: [
+    '..yyyyyy..',
+    '.yBBBBBBy.',
+    'yyyyyyyyyy',
+    'kGGGGGGGGk',
+    'kssssssssk',
+    'kskssssksk',
+    'kcssssssck',
+    'ksssrrsssk',
+    '.kssssssk.',
+    '..kkkkkk..',
+  ],
+  // 替換造型 2：草莓帽（限定卡解鎖）
+  head2: [
+    '...gGGg...',
+    '..rrrrrr..',
+    '.rwrrrwrr.',
+    'rrrrwrrrrr',
+    'kssssssssk',
+    'kskssssksk',
+    'kcssssssck',
+    'ksssrrsssk',
+    '.kssssssk.',
+    '..kkkkkk..',
+  ],
   // 蛇身：蔬果籃（暫定）
   body: [
     '.kkkkkkkk.',
@@ -43,6 +69,39 @@ const SPRITES = {
   grass2: [
     'LLLLLLLLLL', 'LLLLMLLLLL', 'LLLLLLLLLL', 'LMLLLLLLML', 'LLLLLLLLLL',
     'LLLLLLLLLL', 'LLLLLLMLLL', 'LLLLLLLLLL', 'LLMLLLLLLL', 'LLLLLLLLLL',
+  ],
+  // 翻耕農地
+  soil1: [
+    'bbbbbbbbbb', 'BBBBBBBBBB', 'bbbbbbbbbb', 'bbbbbbbbbb', 'bbbbgbbbbb',
+    'BBBBBBBBBB', 'bbbbbbbbbb', 'bbbbbbbbbb', 'bbbbbbbbbb', 'BBBBBBBBBB',
+  ],
+  soil2: [
+    'bbbbbbbbbb', 'BBBBBBBBBB', 'bbbbbbbbbb', 'bbbbbbbbbb', 'bbbbbbbbbb',
+    'BBBBBBBBBB', 'bbbbbbgbbb', 'bbbbbbbbbb', 'bbbbbbbbbb', 'BBBBBBBBBB',
+  ],
+  lock: [
+    '...kkkk...',
+    '..k....k..',
+    '..k....k..',
+    '.kkkkkkkk.',
+    '.kyyyyyyk.',
+    '.kyyDDyyk.',
+    '.kyyDDyyk.',
+    '.kyyyyyyk.',
+    '.kkkkkkkk.',
+    '..........',
+  ],
+  house: [
+    '....kk....',
+    '...krrk...',
+    '..krrrrk..',
+    '.krrrrrrk.',
+    'kkkkkkkkkk',
+    '.kwwwwwwk.',
+    '.kwBBwuuk.',
+    '.kwBBwuuk.',
+    '.kwBBwwwk.',
+    '.kkkkkkkk.',
   ],
   fence: [
     'DBBBBBBBBD', 'DbbbbbbbbD', 'DBBBBBBBBD', 'DDDDDDDDDD', 'DBBBBBBBBD',
@@ -245,6 +304,13 @@ const SPRITES = {
     '..........',
     '.p......P.',
   ],
+};
+
+// 關卡背景：場地地磚與色調
+export const BG_TILES = {
+  field: { keys: ['grass1', 'grass2'] },
+  soil: { keys: ['soil1', 'soil2'] },
+  night: { keys: ['grass1', 'grass2'], tint: 0x5c6bc0, fenceTint: 0x7986cb },
 };
 
 export function buildTextures(scene) {

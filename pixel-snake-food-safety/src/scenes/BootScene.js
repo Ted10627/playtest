@@ -6,6 +6,6 @@ export class BootScene extends Phaser.Scene {
 
   create() {
     buildTextures(this);
-    this.scene.start('Game');
+    this.scene.start('Title');
   }
 }

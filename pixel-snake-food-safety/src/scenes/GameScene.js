@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
 import { Game } from '../logic/game.js';
 import { cloneParams } from '../config/params.js';
-import { CELL } from '../art/pixelArt.js';
+import { CELL, BG_TILES } from '../art/pixelArt.js';
 import { bindDirectionInput } from '../platform/input.js';
+import { loadSave, writeSave } from '../platform/storage.js';
+import { applyResult, stepMsFor } from '../logic/progress.js';
 import { FONT, W } from '../config/layout.js';
 import { EVENT_CONTENT } from '../config/eventContent.js';
+import { SKINS } from '../config/cards.js';
 
 const BOARD_Y = 100;                 // 場地（含柵欄）上緣
 const ANGLE = { up: 0, right: 90, down: 180, left: -90 };
@@ -15,7 +18,11 @@ export class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
 
   create() {
+    this.save = loadSave();
     this.params = cloneParams();
+    this.params.stepMs = stepMsFor(this.save, this.params.stepMs);
+    this.headTex = SKINS.find(s => s.id === this.save.skin).texture;
+    this.ended = false;
     this.game_ = new Game(this.params);
     const { cols, rows } = this.params;
     // 場地格 (x,y) 的畫面中心；柵欄在場地外一圈
@@ -45,13 +52,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   drawBoard(cols, rows) {
+    const bg = BG_TILES[this.save.bg];
     for (let y = -1; y <= rows; y++) {
       for (let x = -1; x <= cols; x++) {
         const { x: px, y: py } = this.cellPos(x, y);
         const fence = x < 0 || y < 0 || x >= cols || y >= rows;
-        const key = fence ? 'fence' : ((x + y) % 2 ? 'grass1' : 'grass2');
-        const s = this.add.image(px, py, key);
-        if (fence) { s.setData('cell', `${x},${y}`); if (x < 0 || x >= cols) s.setAngle(90); }
+        const s = this.add.image(px, py, fence ? 'fence' : bg.keys[(x + y) % 2]);
+        if (fence && (x < 0 || x >= cols)) s.setAngle(90);
+        const tint = fence ? bg.fenceTint : bg.tint;
+        if (tint) s.setTint(tint);
       }
     }
   }
@@ -256,7 +265,7 @@ export class GameScene extends Phaser.Scene {
       if (!seg) return;
       const p = this.cellPos(seg.x, seg.y);
       s.setPosition(p.x, p.y);
-      if (i === 0) s.setTexture('head').setAngle(ANGLE[g.dir]).setDepth(3);
+      if (i === 0) s.setTexture(this.headTex).setAngle(ANGLE[g.dir]).setDepth(3);
       else s.setTexture('body').setAngle(0).setDepth(2);
     });
   }
@@ -311,19 +320,14 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(ms, () => this.toast.setVisible(false));
   }
 
+  // 結算：更新存檔（最高分、卡片解鎖）後進入結算畫面
   showResult(passed, reason) {
-    const H = this.scale.height;
-    const layer = this.add.container(0, 0).setDepth(20);
-    layer.add(this.add.rectangle(W / 2, H / 2, W, H, 0x000000, 0.6));
-    layer.add(this.add.text(W / 2, 330, passed ? '過關！' : '挑戰失敗', {
-      fontFamily: FONT, fontSize: '56px', fontStyle: 'bold', color: passed ? '#c5e1a5' : '#ffab91',
-    }).setOrigin(0.5));
-    layer.add(this.add.text(W / 2, 410, `${reason}\n本局分數 ${this.game_.score}`, {
-      fontFamily: FONT, fontSize: '28px', color: '#ffffff', align: 'center', lineSpacing: 10,
-    }).setOrigin(0.5));
-    const btn = this.add.rectangle(W / 2, 530, 240, 70, 0x7cb342).setStrokeStyle(4, 0xffffff).setInteractive();
-    layer.add(btn);
-    layer.add(this.add.text(W / 2, 530, '再玩一次', { fontFamily: FONT, fontSize: '30px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5));
-    btn.on('pointerup', () => this.scene.restart());
+    if (this.ended) return;
+    this.ended = true;
+    const score = this.game_.score;
+    const { save, newCards, newBest } = applyResult(this.save, { passed, score });
+    writeSave(save);
+    this.showToast(passed ? '過關！' : reason, 800);
+    this.time.delayedCall(900, () => this.scene.start('Result', { passed, reason, score, best: save.best, newBest, newCards }));
   }
 }
