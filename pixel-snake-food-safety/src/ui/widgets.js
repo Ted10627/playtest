@@ -1,5 +1,6 @@
 // 共用 UI 元件
 import { FONT, W } from '../config/layout.js';
+import { sfx } from '../platform/audio.js';
 
 export function button(scene, x, y, label, onClick, { w = 300, h = 64, color = 0x7cb342, size = 26, icon = null } = {}) {
   const c = scene.add.container(x, y);
@@ -11,7 +12,7 @@ export function button(scene, x, y, label, onClick, { w = 300, h = 64, color = 0
   c.add(parts);
   bg.on('pointerdown', () => c.setScale(0.95));
   bg.on('pointerout', () => c.setScale(1));
-  bg.on('pointerup', () => { c.setScale(1); onClick(); });
+  bg.on('pointerup', () => { c.setScale(1); sfx('click'); onClick(); });
   return c;
 }
 

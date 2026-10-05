@@ -40,3 +40,16 @@ export const DEFAULT_PARAMS = {
 export function cloneParams(p = DEFAULT_PARAMS) {
   return JSON.parse(JSON.stringify(p));
 }
+
+export const getPath = (o, path) => path.split('.').reduce((a, k) => a?.[k], o);
+
+// 套用覆寫值 { 'fruitTypes.safe.score': 30, ... }；忽略不存在的參數
+export function applyOverrides(params, overrides) {
+  for (const [path, v] of Object.entries(overrides || {})) {
+    if (typeof getPath(params, path) !== 'number' || !Number.isFinite(v)) continue;
+    const ks = path.split('.');
+    ks.slice(0, -1).reduce((a, k) => a[k], params)[ks[ks.length - 1]] = v;
+  }
+  if (params.iconMaxSec < params.iconMinSec) params.iconMaxSec = params.iconMinSec;
+  return params;
+}

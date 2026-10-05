@@ -1,8 +1,10 @@
 import Phaser from 'phaser';
 import { W, FONT } from '../config/layout.js';
 import { button, text } from '../ui/widgets.js';
-import { loadSave } from '../platform/storage.js';
+import { loadSave, writeSave } from '../platform/storage.js';
 import { SKINS } from '../config/cards.js';
+import { startBgm, setAudioPrefs } from '../platform/audio.js';
+import { openParamPanel } from '../ui/paramPanel.js';
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title'); }
@@ -38,5 +40,28 @@ export class TitleScene extends Phaser.Scene {
 
     text(this, W / 2, 900, `歷史最高分 ${save.best}　｜　已收集卡片 ${save.cards} / 13`, 18, '#ffffff').setOrigin(0.5);
     text(this, W / 2, 935, '畫面為像素佔位美術，正式版依《食農探險繪本》角色重繪', 13, '#c5e1a5', { fontFamily: FONT }).setOrigin(0.5);
+
+    // 音樂、音效分別開關（存檔保存）
+    const toggle = (x, key, label) => {
+      const t = text(this, x, 24, '', 17, '#ffffff', { backgroundColor: '#00000066', padding: { x: 8, y: 4 } })
+        .setOrigin(1, 0).setInteractive({ useHandCursor: true });
+      const paint = () => t.setText(`${label}：${save[key] ? '開' : '關'}`);
+      t.on('pointerup', () => {
+        save[key] = !save[key];
+        writeSave(save);
+        setAudioPrefs({ music: save.music, sfx: save.sfx });
+        paint();
+      });
+      paint();
+    };
+    toggle(W - 16, 'sfx', '音效');
+    toggle(W - 120, 'music', '音樂');
+
+    // 展示用參數面板（模擬管理後台之遊戲參數調整）
+    const pp = text(this, 16, 24, '⚙ 參數調整', 17, '#ffffff', { backgroundColor: '#00000066', padding: { x: 8, y: 4 } })
+      .setInteractive({ useHandCursor: true });
+    pp.on('pointerup', openParamPanel);
+
+    startBgm();
   }
 }

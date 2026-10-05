@@ -11,6 +11,17 @@ export function loadSave() {
   }
 }
 
+// 遊戲參數覆寫值（展示用參數面板；正式版由管理後台之遠端參數提供）
+const PARAM_KEY = 'fsps-params-v1';
+
+export function loadParamOverrides() {
+  try { return JSON.parse(localStorage.getItem(PARAM_KEY)) || {}; } catch { return {}; }
+}
+
+export function writeParamOverrides(o) {
+  try { localStorage.setItem(PARAM_KEY, JSON.stringify(o)); } catch { /* 無法寫入時不套用 */ }
+}
+
 export function writeSave(save) {
   try {
     localStorage.setItem(KEY, JSON.stringify(save));

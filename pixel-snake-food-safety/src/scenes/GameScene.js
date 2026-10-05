@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { Game } from '../logic/game.js';
-import { cloneParams } from '../config/params.js';
+import { cloneParams, applyOverrides } from '../config/params.js';
 import { CELL, BG_TILES } from '../art/pixelArt.js';
 import { bindDirectionInput } from '../platform/input.js';
-import { loadSave, writeSave } from '../platform/storage.js';
+import { loadSave, writeSave, loadParamOverrides } from '../platform/storage.js';
+import { sfx, startBgm } from '../platform/audio.js';
 import { applyResult, stepMsFor } from '../logic/progress.js';
 import { FONT, W } from '../config/layout.js';
 import { EVENT_CONTENT } from '../config/eventContent.js';
@@ -19,8 +20,10 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.save = loadSave();
-    this.params = cloneParams();
+    // 參數：預設值 ＋ 參數面板覆寫值（正式版為後台遠端參數），於每局開始時套用
+    this.params = applyOverrides(cloneParams(), loadParamOverrides());
     this.params.stepMs = stepMsFor(this.save, this.params.stepMs);
+    startBgm();
     this.headTex = SKINS.find(s => s.id === this.save.skin).texture;
     this.ended = false;
     this.game_ = new Game(this.params);
@@ -73,9 +76,9 @@ export class GameScene extends Phaser.Scene {
     // 雙計量條：左「檢驗能量」、右「農藥風險」，各 barMax 格
     const mkBar = (x0, label, color) => {
       this.add.text(x0, 48, label, { fontFamily: FONT, fontSize: '16px', color: '#ffffff' });
-      const segs = [];
-      for (let i = 0; i < this.params.barMax; i++) {
-        segs.push(this.add.rectangle(x0 + 72 + i * 9, 58, 7, 18, 0x1b2e0f).setOrigin(0, 0.5));
+      const segs = [], max = this.params.barMax, segW = 180 / max;
+      for (let i = 0; i < max; i++) {
+        segs.push(this.add.rectangle(x0 + 72 + i * segW, 58, Math.max(1, segW - 2), 18, 0x1b2e0f).setOrigin(0, 0.5));
       }
       return { segs, color };
     };
@@ -88,7 +91,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   drawDpad() {
-    const cx = 130, cy = 860, d = 72;
+    const cx = 130, cy = 850, d = 70;   // 下鍵底緣 953，不超出畫面高度 960
     const dirs = { up: [0, -1, '▲'], down: [0, 1, '▼'], left: [-1, 0, '◀'], right: [1, 0, '▶'] };
     for (const [dir, [dx, dy, label]] of Object.entries(dirs)) {
       const btn = this.add.rectangle(cx + dx * d, cy + dy * d, 66, 66, 0xffffff, 0.85).setStrokeStyle(3, 0x33691e).setInteractive();
@@ -165,6 +168,7 @@ export class GameScene extends Phaser.Scene {
 
   handleEvents(events) {
     for (const e of events) {
+      this.playSfx(e);
       if (e.type === 'gateOpen') this.openGate(e.gate);
       if (e.type === 'eat') this.onEat(e);
       if (e.type === 'trigger') this.playCutscene(e.kind);
@@ -199,6 +203,15 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: drop, scale: 1.6, alpha: 0, duration: 500, onComplete: () => drop.destroy() });
       this.tweens.add({ targets: c.obj, alpha: 0, scale: 0.2, duration: 400, onComplete: () => c.obj.destroy() });
     }
+  }
+
+  playSfx(e) {
+    const name = {
+      eat: e.fruit && (e.fruit.type === 'safe' ? 'safe' : e.def?.score < 0 ? 'risk' : 'eat'),
+      trigger: e.group === 'risk' ? 'alarm' : 'support',
+      skillUsed: 'skill', iconEaten: 'charge', gateOpen: 'gate', die: 'die', pass: 'pass',
+    }[e.type];
+    if (name) sfx(name);
   }
 
   paintBar(bar, value) {

@@ -10,6 +10,8 @@ export function newSave() {
     skin: 'base',
     bg: 'field',
     speedOn: false,           // 限定卡 L3 特殊功能開關
+    music: true,              // 背景音樂開關
+    sfx: true,                // 音效開關
   };
 }
 
