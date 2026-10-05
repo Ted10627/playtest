@@ -89,6 +89,100 @@ test('通關時間到開啟撤退點，進入即過關', () => {
   assert.equal(g.state, 'passed');
 });
 
+// ---------- P2：雙計量條與事件 ----------
+const eatAhead = (g, type) => {
+  const h = g.head, d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[g.dir];
+  g.fruits.push({ x: h.x + d[0], y: h.y + d[1], type, veg: 'cabbage', label: type === 'safe' ? 'CAS' : null });
+  const ev = g.step();
+  g.fruits = g.fruits.filter(f => !(f.x === h.x + d[0] && f.y === h.y + d[1]));
+  return ev;
+};
+
+test('蔬果依類型增減計量條', () => {
+  const g = mk();
+  eatAhead(g, 'normal'); eatAhead(g, 'safe'); eatAhead(g, 'risk');
+  assert.equal(g.energy, 3);
+  assert.equal(g.riskBar, 3);
+});
+
+test('農藥風險條滿格觸發風險事件並暫停，套用後恢復', () => {
+  const g = mk();
+  g.riskBar = 19;
+  const ev = eatAhead(g, 'risk');
+  const t = ev.find(e => e.type === 'trigger');
+  assert.equal(t.group, 'risk');
+  assert.ok(['eagle', 'weirdo', 'cat'].includes(t.kind));
+  assert.equal(g.state, 'event');
+  assert.equal(g.riskBar, 0);
+  assert.deepEqual(g.update(1000), []); // 過場期間不推進
+  g.resolvePending();
+  assert.equal(g.state, 'playing');
+});
+
+test('檢驗能量條滿格觸發友情支援事件', () => {
+  const g = mk();
+  g.energy = 19;
+  const ev = eatAhead(g, 'safe');
+  assert.equal(ev.find(e => e.type === 'trigger').group, 'support');
+});
+
+const force = (g, kind) => { g.pending = kind; g.state = 'event'; return g.resolvePending(); };
+
+test('老鷹：抓走所有標章蔬果', () => {
+  const g = mk();
+  g.fruits = [{ x: 1, y: 1, type: 'safe' }, { x: 2, y: 1, type: 'normal' }, { x: 3, y: 1, type: 'safe' }];
+  const ev = force(g, 'eagle');
+  assert.equal(ev.find(e => e.type === 'eagle').taken.length, 2);
+  assert.ok(!g.fruits.some(f => f.type === 'safe'));
+  assert.equal(g.fruits.length, g.p.fruitCount);
+});
+
+test('怪人：蔬果暫時轉為風險蔬果，時間到恢復', () => {
+  const g = mk({ stepMs: 100000 });
+  g.fruits = [{ x: 1, y: 1, type: 'safe' }, { x: 2, y: 1, type: 'normal' }];
+  force(g, 'weirdo');
+  assert.ok(g.fruits.every(f => f.type === 'risk'));
+  g.update(g.p.weirdoSec * 1000 + 1);
+  assert.deepEqual(g.fruits.map(f => f.type), ['safe', 'normal']);
+});
+
+test('貓咪：貓爪追擊，抓到即死亡；時間到消失', () => {
+  const g = mk({ stepMs: 100000, catStepMs: 10 });
+  force(g, 'cat');
+  assert.ok(g.effects.cat);
+  g.update(2000);
+  assert.equal(g.deathCause, 'cat');
+
+  const g2 = mk({ stepMs: 100000, catStepMs: 100000 });
+  force(g2, 'cat');
+  g2.update(g2.p.catSec * 1000 + 1);
+  assert.equal(g2.effects.cat, undefined);
+  assert.equal(g2.state, 'playing');
+});
+
+test('植醫：風險蔬果全部轉為一般或標章蔬果', () => {
+  const g = mk();
+  g.fruits = [1, 2, 3, 4].map(x => ({ x, y: 1, type: 'risk' }));
+  force(g, 'doctor');
+  assert.ok(g.fruits.every(f => f.type === 'normal' || f.type === 'safe'));
+});
+
+test('阿慈：增加標章蔬果', () => {
+  const g = mk();
+  force(g, 'aci');
+  assert.equal(g.fruits.filter(f => f.type === 'safe').length, g.p.aciExtraSafe);
+});
+
+test('阿鴻：無敵期間吃風險蔬果不扣分且能量 +1', () => {
+  const g = mk();
+  g.score = 50;
+  force(g, 'ahong');
+  eatAhead(g, 'risk');
+  assert.equal(g.score, 50);
+  assert.equal(g.energy, 1);
+  assert.equal(g.riskBar, 0);
+});
+
 test('補生避開蛇身與蛇頭前方', () => {
   const g = mk({ cols: 3, rows: 3, spawnSafeAhead: 2 });
   g.snake = [{ x: 1, y: 2 }, { x: 0, y: 2 }, { x: 2, y: 2 }];

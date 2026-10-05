@@ -28,8 +28,12 @@ export class Game {
     this.elapsedMs = 0;
     this.stepAcc = 0;
     this.gate = null;       // 撤退點 { x, y }，位於柵欄格（場地外一圈）
-    this.state = 'playing'; // playing | dead | passed
+    this.state = 'playing'; // playing | event（等待過場動畫）| dead | passed
     this.deathCause = null;
+    this.energy = 0;        // 檢驗能量條
+    this.riskBar = 0;       // 農藥風險條
+    this.pending = null;    // 待套用之事件
+    this.effects = {};      // 進行中之限時效果：weirdo / cat / ahong
     this.fruits = [];
     for (let i = 0; i < this.p.fruitCount; i++) this.spawnFruit();
   }
@@ -55,12 +59,123 @@ export class Game {
       this.gate = this.pickGateCell();
       events.push({ type: 'gateOpen', gate: this.gate });
     }
+    events.push(...this.tickEffects(dtMs));
     this.stepAcc += dtMs;
     while (this.stepAcc >= this.p.stepMs && this.state === 'playing') {
       this.stepAcc -= this.p.stepMs;
       events.push(...this.step());
+      events.push(...this.checkCat());
     }
     return events;
+  }
+
+  // ---------- 計量條與事件 ----------
+  addBars(energy, risk, events) {
+    const max = this.p.barMax;
+    this.energy = Math.min(max, this.energy + energy);
+    this.riskBar = Math.min(max, this.riskBar + risk);
+    // 同時滿格時，風險事件優先
+    if (this.riskBar >= max) this.trigger('risk', events);
+    else if (this.energy >= max) this.trigger('support', events);
+  }
+
+  trigger(group, events) {
+    const table = group === 'risk' ? this.p.riskEvents : this.p.supportEvents;
+    const kind = this.pickWeighted(table);
+    if (this.p.resetBarOnTrigger) { if (group === 'risk') this.riskBar = 0; else this.energy = 0; }
+    this.pending = kind;
+    this.state = 'event';
+    events.push({ type: 'trigger', group, kind });
+  }
+
+  // 過場動畫結束後由畫面層呼叫，套用事件效果
+  resolvePending() {
+    const events = [];
+    const kind = this.pending;
+    if (!kind) return events;
+    this.pending = null;
+    this.state = 'playing';
+    const fx = this.effects;
+    if (kind === 'eagle') {
+      const taken = this.fruits.filter(f => f.type === 'safe');
+      this.fruits = this.fruits.filter(f => f.type !== 'safe');
+      events.push({ type: 'eagle', taken });
+      while (this.fruits.length < this.p.fruitCount) this.spawnFruit(this.pickWeighted({ normal: 2, risk: 1 }));
+    } else if (kind === 'weirdo') {
+      if (!fx.weirdo) for (const f of this.fruits) { f.orig = f.type; f.type = 'risk'; }
+      fx.weirdo = { ms: this.p.weirdoSec * 1000 };
+    } else if (kind === 'cat') {
+      fx.cat = { ...this.farthestCorner(), ms: this.p.catSec * 1000, acc: 0 };
+    } else if (kind === 'doctor') {
+      for (const f of this.fruits) if (f.type === 'risk') {
+        f.type = this.rng() < this.p.doctorSafeRatio ? 'safe' : 'normal';
+        if (f.type === 'safe') f.label = SAFE_LABELS[Math.floor(this.rng() * SAFE_LABELS.length)];
+        delete f.orig;
+      }
+    } else if (kind === 'aci') {
+      for (let i = 0; i < this.p.aciExtraSafe; i++) this.spawnFruit('safe');
+    } else if (kind === 'ahong') {
+      fx.ahong = { ms: this.p.ahongSec * 1000 };
+    }
+    events.push({ type: 'applied', kind });
+    return events;
+  }
+
+  tickEffects(dtMs) {
+    const events = [];
+    const fx = this.effects;
+    if (fx.weirdo && (fx.weirdo.ms -= dtMs) <= 0) {
+      delete fx.weirdo;
+      for (const f of this.fruits) if (f.orig) { f.type = f.orig; delete f.orig; }
+      events.push({ type: 'effectEnd', kind: 'weirdo' });
+    }
+    if (fx.ahong && (fx.ahong.ms -= dtMs) <= 0) {
+      delete fx.ahong;
+      events.push({ type: 'effectEnd', kind: 'ahong' });
+    }
+    if (fx.cat) {
+      fx.cat.ms -= dtMs;
+      if (fx.cat.ms <= 0) {
+        delete fx.cat;
+        events.push({ type: 'effectEnd', kind: 'cat' });
+      } else {
+        fx.cat.acc += dtMs;
+        while (fx.cat.acc >= this.p.catStepMs) {
+          fx.cat.acc -= this.p.catStepMs;
+          const dx = Math.sign(this.head.x - fx.cat.x), dy = Math.sign(this.head.y - fx.cat.y);
+          // 每次朝距離較遠的軸向移動一格
+          if (Math.abs(this.head.x - fx.cat.x) >= Math.abs(this.head.y - fx.cat.y)) fx.cat.x += dx; else fx.cat.y += dy;
+          events.push({ type: 'catMove' });
+        }
+        events.push(...this.checkCat());
+      }
+    }
+    return events;
+  }
+
+  checkCat() {
+    const c = this.effects.cat;
+    if (c && this.state === 'playing' && c.x === this.head.x && c.y === this.head.y) {
+      const events = [];
+      this.die('cat', events);
+      return events;
+    }
+    return [];
+  }
+
+  farthestCorner() {
+    const { cols, rows } = this.p;
+    const corners = [{ x: 0, y: 0 }, { x: cols - 1, y: 0 }, { x: 0, y: rows - 1 }, { x: cols - 1, y: rows - 1 }];
+    const d = c => Math.abs(c.x - this.head.x) + Math.abs(c.y - this.head.y);
+    return corners.reduce((a, b) => (d(b) > d(a) ? b : a));
+  }
+
+  pickWeighted(table) {
+    const entries = Object.entries(table).filter(([, w]) => w > 0);
+    const total = entries.reduce((a, [, w]) => a + w, 0);
+    let r = this.rng() * total;
+    for (const [k, w] of entries) { if ((r -= w) < 0) return k; }
+    return entries[entries.length - 1][0];
   }
 
   step() {
@@ -93,11 +208,19 @@ export class Game {
     const fi = this.fruits.findIndex(f => f.x === nx && f.y === ny);
     if (fi >= 0) {
       const fruit = this.fruits.splice(fi, 1)[0];
-      const def = this.p.fruitTypes[fruit.type];
+      let def = this.p.fruitTypes[fruit.type];
+      // 阿鴻無敵：吃到風險蔬果不扣分，能量反而增加
+      if (fruit.type === 'risk' && this.effects.ahong) def = { score: 0, energy: this.p.ahongRiskEnergy, risk: 0 };
       this.score = Math.max(0, this.score + def.score);
       this.grow += 1;
       events.push({ type: 'eat', fruit, def });
-      this.spawnFruit();
+      if (this.fruits.length < this.p.fruitCount) {
+        const nf = this.spawnFruit();
+        if (nf && this.effects.weirdo) { nf.orig = nf.type; nf.type = 'risk'; }
+      }
+      events.push({ type: 'move' });
+      this.addBars(def.energy, def.risk, events);
+      return events;
     }
     events.push({ type: 'move' });
     return events;
@@ -125,11 +248,7 @@ export class Game {
   }
 
   pickType() {
-    const types = Object.entries(this.p.fruitTypes);
-    const total = types.reduce((a, [, t]) => a + t.weight, 0);
-    let r = this.rng() * total;
-    for (const [k, t] of types) { if ((r -= t.weight) < 0) return k; }
-    return types[0][0];
+    return this.pickWeighted(Object.fromEntries(Object.entries(this.p.fruitTypes).map(([k, t]) => [k, t.weight])));
   }
 
   spawnFruit(type = this.pickType()) {
