@@ -183,6 +183,58 @@ test('阿鴻：無敵期間吃風險蔬果不扣分且能量 +1', () => {
   assert.equal(g.riskBar, 0);
 });
 
+// ---------- P3：爸爸／媽媽常駐按鈕 ----------
+test('開局為滿狀態，使用後歸零且未滿不可再用', () => {
+  const g = mk();
+  assert.equal(g.skills.mom, 2);
+  assert.ok(g.useSkill('mom').some(e => e.type === 'skillUsed'));
+  assert.equal(g.skills.mom, 0);
+  assert.deepEqual(g.useSkill('mom'), []);
+});
+
+test('媽媽：清除場上所有風險蔬果', () => {
+  const g = mk();
+  g.fruits = [{ x: 1, y: 1, type: 'risk' }, { x: 2, y: 1, type: 'safe' }, { x: 3, y: 1, type: 'risk' }];
+  g.useSkill('mom');
+  assert.ok(!g.fruits.some(f => f.type === 'risk'));
+  assert.equal(g.fruits.length, g.p.fruitCount);
+});
+
+test('吃到對應圖示兩次才回滿', () => {
+  const g = mk();
+  g.useSkill('dad');
+  for (let i = 1; i <= 2; i++) {
+    const h = g.head;
+    g.icons = [{ x: h.x, y: h.y - 1, skill: 'dad' }];
+    const ev = g.step();
+    assert.equal(ev.find(e => e.type === 'iconEaten').charge, i);
+  }
+  assert.equal(g.skills.dad, 2);
+  assert.equal(g.snake.length, 3); // 吃圖示不會變長
+});
+
+test('圖示依間隔出現，只為未滿的角色產生', () => {
+  const g = mk({ stepMs: 100000 });
+  g.update(g.p.iconMaxSec * 1000 + 1);
+  assert.equal(g.icons.length, 0); // 兩者皆滿：不產生
+  g.useSkill('mom');
+  g.update(g.p.iconMaxSec * 1000 + 1);
+  assert.equal(g.icons.length, 1);
+  assert.equal(g.icons[0].skill, 'mom');
+});
+
+test('爸爸磁鐵：範圍內蔬果被吸向蛇頭並被吃到，範圍外不動', () => {
+  const g = mk({ stepMs: 100000 });
+  const h = g.head;
+  g.fruits = [{ x: h.x + 2, y: h.y, type: 'normal' }, { x: 0, y: 0, type: 'safe' }];
+  g.useSkill('dad');
+  g.update(g.p.magnetStepMs * 3);
+  assert.equal(g.score, 10);
+  assert.ok(g.fruits.some(f => f.x === 0 && f.y === 0)); // 範圍外的蔬果仍在原位
+  g.update(g.p.magnetSec * 1000);
+  assert.equal(g.effects.magnet, undefined);
+});
+
 test('補生避開蛇身與蛇頭前方', () => {
   const g = mk({ cols: 3, rows: 3, spawnSafeAhead: 2 });
   g.snake = [{ x: 1, y: 2 }, { x: 0, y: 2 }, { x: 2, y: 2 }];

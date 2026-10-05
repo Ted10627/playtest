@@ -29,8 +29,12 @@ export class GameScene extends Phaser.Scene {
     this.gateSprite = null;
     this.cutscene = null;
     this.catSprite = null;
+    this.iconSprites = new Map();
+    this.magnetRing = this.add.circle(0, 0, (this.params.magnetRadius + 0.5) * CELL, 0xef5350, 0.12)
+      .setStrokeStyle(3, 0xef5350, 0.8).setDepth(0.6).setVisible(false);
     this.drawHud();
     this.drawDpad();
+    this.drawSkillButtons();
 
     const boardRect = new Phaser.Geom.Rectangle(0, BOARD_Y, W, (rows + 2) * CELL);
     bindDirectionInput(this, (d) => this.game_.setDirection(d), boardRect);
@@ -86,6 +90,46 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  // 右下角爸爸／媽媽常駐按鈕；桌機另支援 Q／E 鍵
+  drawSkillButtons() {
+    const defs = [
+      { skill: 'dad', x: 345, name: '爸爸', desc: '磁鐵', key: 'Q' },
+      { skill: 'mom', x: 470, name: '媽媽', desc: '清除風險', key: 'E' },
+    ];
+    this.skillUi = {};
+    for (const d of defs) {
+      const y = 860;
+      const bg = this.add.rectangle(d.x, y, 112, 150, 0xffffff, 0.9).setStrokeStyle(4, 0x33691e).setInteractive();
+      const pic = this.add.image(d.x, y - 38, d.skill).setScale(1.8);
+      this.add.text(d.x, y + 14, `${d.name}\n${d.desc}`, {
+        fontFamily: FONT, fontSize: '15px', color: '#33691e', fontStyle: 'bold', align: 'center', lineSpacing: 2,
+      }).setOrigin(0.5);
+      const pips = [0, 1].map(i => this.add.circle(d.x - 12 + i * 24, y + 52, 8, 0x33691e));
+      const full = this.add.text(d.x, y + 52, 'FULL', { fontFamily: FONT, fontSize: '16px', color: '#ffffff', backgroundColor: '#e65100', padding: { x: 6, y: 1 }, fontStyle: 'bold' }).setOrigin(0.5);
+      this.add.text(d.x + 48, y - 66, d.key, { fontFamily: FONT, fontSize: '13px', color: '#9e9e9e' }).setOrigin(1, 0);
+      bg.on('pointerdown', () => this.useSkill(d.skill));
+      this.skillUi[d.skill] = { bg, pic, pips, full };
+    }
+    this.input.keyboard.on('keydown-Q', () => this.useSkill('dad'));
+    this.input.keyboard.on('keydown-E', () => this.useSkill('mom'));
+  }
+
+  useSkill(skill) {
+    if (this.cutscene) return;
+    this.handleEvents(this.game_.useSkill(skill));
+  }
+
+  paintSkills() {
+    const max = this.params.skillCharges;
+    for (const [skill, ui] of Object.entries(this.skillUi)) {
+      const c = this.game_.skills[skill], ready = c >= max;
+      ui.full.setVisible(ready);
+      ui.pips.forEach((p, i) => p.setVisible(!ready).setFillStyle(i < c ? 0xffa000 : 0xbdbdbd));
+      ui.bg.setFillStyle(ready ? 0xfff8e1 : 0xe0e0e0, 0.95);
+      ui.pic.setAlpha(ready ? 1 : 0.45);
+    }
+  }
+
   update(_t, dt) {
     if (!this.cutscene) this.handleEvents(this.game_.update(Math.min(dt, 100)));
     const g = this.game_;
@@ -98,8 +142,12 @@ export class GameScene extends Phaser.Scene {
     if (fx.weirdo) parts.push(`農藥噴灑中 ${Math.ceil(fx.weirdo.ms / 1000)}s`);
     if (fx.ahong) parts.push(`無敵 ${Math.ceil(fx.ahong.ms / 1000)}s`);
     if (fx.cat) parts.push(`貓爪追擊 ${Math.ceil(fx.cat.ms / 1000)}s`);
+    if (fx.magnet) parts.push(`磁鐵 ${Math.ceil(fx.magnet.ms / 1000)}s`);
     this.fxText.setText(parts.join('｜'));
     this.sprayOverlay.setVisible(!!fx.weirdo);
+    this.magnetRing.setVisible(!!fx.magnet);
+    if (fx.magnet) { const p = this.cellPos(g.head.x, g.head.y); this.magnetRing.setPosition(p.x, p.y); }
+    this.paintSkills();
     if (this.snakeSprites[0]) {
       if (fx.ahong) this.snakeSprites[0].setTint(Math.floor(this.time.now / 120) % 2 ? 0xfff176 : 0xffffff);
       else this.snakeSprites[0].clearTint();
@@ -112,10 +160,36 @@ export class GameScene extends Phaser.Scene {
       if (e.type === 'eat') this.onEat(e);
       if (e.type === 'trigger') this.playCutscene(e.kind);
       if (e.type === 'eagle') this.flyAway(e.taken);
+      if (e.type === 'cleared') this.washAway(e.removed);
+      if (e.type === 'skillUsed') this.showToast(e.skill === 'dad' ? '爸爸的磁鐵：吸引周圍蔬果！' : '媽媽出手：風險蔬果清潔溜溜！', 1500);
+      if (e.type === 'iconEaten') this.showToast(`${e.icon.skill === 'dad' ? '爸爸' : '媽媽'}充能 ${e.charge}/${this.params.skillCharges}`, 1000);
       if (e.type === 'die') this.showResult(false, DEATH_TEXT[e.cause]);
       if (e.type === 'pass') this.showResult(true, '成功抵達撤退點');
     }
-    if (events.length) { this.syncFruits(); this.syncSnake(); this.syncCat(); }
+    if (events.length) { this.syncFruits(); this.syncSnake(); this.syncCat(); this.syncIcons(); }
+  }
+
+  syncIcons() {
+    const alive = new Set(this.game_.icons);
+    for (const [i, s] of this.iconSprites) if (!alive.has(i)) { s.destroy(); this.iconSprites.delete(i); }
+    for (const i of this.game_.icons) {
+      if (this.iconSprites.has(i)) continue;
+      const p = this.cellPos(i.x, i.y);
+      const s = this.add.image(p.x, p.y, i.skill === 'dad' ? 'magnet' : 'wash').setDepth(1);
+      this.tweens.add({ targets: s, y: p.y - 4, yoyo: true, repeat: -1, duration: 400 });
+      this.iconSprites.set(i, s);
+    }
+  }
+
+  washAway(removed) {
+    for (const f of removed) {
+      const c = this.fruitSprites.get(f);
+      if (!c) continue;
+      this.fruitSprites.delete(f);
+      const drop = this.add.image(c.obj.x, c.obj.y, 'wash').setDepth(7);
+      this.tweens.add({ targets: drop, scale: 1.6, alpha: 0, duration: 500, onComplete: () => drop.destroy() });
+      this.tweens.add({ targets: c.obj, alpha: 0, scale: 0.2, duration: 400, onComplete: () => c.obj.destroy() });
+    }
   }
 
   paintBar(bar, value) {
@@ -194,7 +268,13 @@ export class GameScene extends Phaser.Scene {
       if (!alive.has(f) || c.type !== f.type) { c.obj.destroy(); this.fruitSprites.delete(f); }
     }
     for (const f of this.game_.fruits) {
-      if (this.fruitSprites.has(f)) continue;
+      const existing = this.fruitSprites.get(f);
+      if (existing) {
+        // 被磁鐵吸動的蔬果：平滑移到新位置
+        const p = this.cellPos(f.x, f.y);
+        if (existing.obj.x !== p.x || existing.obj.y !== p.y) this.tweens.add({ targets: existing.obj, x: p.x, y: p.y, duration: 120 });
+        continue;
+      }
       const p = this.cellPos(f.x, f.y);
       const parts = [this.add.image(0, 0, f.veg)];
       if (f.type === 'risk') { parts[0].setTint(0xc8b6d6); parts.push(this.add.image(0, 0, 'spray')); }

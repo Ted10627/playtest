@@ -6,6 +6,7 @@ const PAL = {
   k: '#2b2b2b', w: '#ffffff', s: '#ffcc99', c: '#f48fb1', r: '#e53935', R: '#b71c1c',
   g: '#4caf50', G: '#2e7d32', l: '#a5d6a7', o: '#fb8c00', O: '#e65100', y: '#fdd835',
   b: '#a1887f', B: '#6d4c41', D: '#4e342e', M: '#8bc34a', L: '#9ccc65', p: '#8e24aa', P: '#ce93d8',
+  u: '#42a5f5', U: '#1565c0', v: '#e3f2fd',
 };
 
 const SPRITES = {
@@ -180,6 +181,56 @@ const SPRITES = {
     'kGGGGGGGGk',
     '.kBBBBBBk.',
     '..kk..kk..',
+  ],
+  // ---- 基本角色（佔位）與場上充能圖示 ----
+  dad: [
+    '..kkkkkk..',
+    '.kBBBBBBk.',
+    '.kssssssk.',
+    'kkkksskkkk',
+    '.kwksskwk.',
+    '.kssssssk.',
+    '..kBBBBk..',
+    '.kblbblbk.',
+    'kbbbbbbbbk',
+    '.kk....kk.',
+  ],
+  mom: [
+    '.kDDDDDDk.',
+    'kDDDDDDDDk',
+    'kDssssssDk',
+    'kDskssskDk',
+    'kDscsscsDk',
+    '.kssrrssk.',
+    '..kppppk..',
+    '.kpPppPpk.',
+    'kppppppppk',
+    '.kk....kk.',
+  ],
+  magnet: [
+    '..........',
+    '.rrr..rrr.',
+    '.rrr..rrr.',
+    '.rrr..rrr.',
+    '.rrr..rrr.',
+    '.rrrrrrrr.',
+    '..rrrrrr..',
+    '...rrrr...',
+    '.ww....ww.',
+    '.ww....ww.',
+  ],
+  // 清洗水滴
+  wash: [
+    '....UU....',
+    '...UuuU...',
+    '..UuvuuU..',
+    '.UuvuuuuU.',
+    '.UuvuuuuU.',
+    'UuuuuuuuuU',
+    'UuuuuuuuuU',
+    '.UuuuuuuU.',
+    '..UUUUUU..',
+    '..........',
   ],
   // 風險蔬果之農藥噴霧標記（疊加於蔬果上）
   spray: [

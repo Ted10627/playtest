@@ -33,7 +33,10 @@ export class Game {
     this.energy = 0;        // 檢驗能量條
     this.riskBar = 0;       // 農藥風險條
     this.pending = null;    // 待套用之事件
-    this.effects = {};      // 進行中之限時效果：weirdo / cat / ahong
+    this.effects = {};      // 進行中之限時效果：weirdo / cat / ahong / magnet
+    this.skills = { dad: this.p.skillCharges, mom: this.p.skillCharges }; // 開局為滿狀態
+    this.icons = [];        // 場上充能圖示 { x, y, skill }
+    this.iconTimer = this.nextIconMs();
     this.fruits = [];
     for (let i = 0; i < this.p.fruitCount; i++) this.spawnFruit();
   }
@@ -60,6 +63,8 @@ export class Game {
       events.push({ type: 'gateOpen', gate: this.gate });
     }
     events.push(...this.tickEffects(dtMs));
+    events.push(...this.tickIcons(dtMs));
+    events.push(...this.tickMagnet(dtMs));
     this.stepAcc += dtMs;
     while (this.stepAcc >= this.p.stepMs && this.state === 'playing') {
       this.stepAcc -= this.p.stepMs;
@@ -205,24 +210,94 @@ export class Game {
     this.snake.unshift({ x: nx, y: ny });
     if (this.grow > 0) this.grow--; else this.snake.pop();
 
-    const fi = this.fruits.findIndex(f => f.x === nx && f.y === ny);
-    if (fi >= 0) {
-      const fruit = this.fruits.splice(fi, 1)[0];
-      let def = this.p.fruitTypes[fruit.type];
-      // 阿鴻無敵：吃到風險蔬果不扣分，能量反而增加
-      if (fruit.type === 'risk' && this.effects.ahong) def = { score: 0, energy: this.p.ahongRiskEnergy, risk: 0 };
-      this.score = Math.max(0, this.score + def.score);
-      this.grow += 1;
-      events.push({ type: 'eat', fruit, def });
-      if (this.fruits.length < this.p.fruitCount) {
-        const nf = this.spawnFruit();
-        if (nf && this.effects.weirdo) { nf.orig = nf.type; nf.type = 'risk'; }
-      }
-      events.push({ type: 'move' });
-      this.addBars(def.energy, def.risk, events);
+    events.push({ type: 'move' });
+    const ii = this.icons.findIndex(i => i.x === nx && i.y === ny);
+    if (ii >= 0) {
+      const icon = this.icons.splice(ii, 1)[0];
+      this.skills[icon.skill] = Math.min(this.p.skillCharges, this.skills[icon.skill] + 1);
+      events.push({ type: 'iconEaten', icon, charge: this.skills[icon.skill] });
+    }
+    const fruit = this.fruits.find(f => f.x === nx && f.y === ny);
+    if (fruit) this.eatFruit(fruit, events);
+    return events;
+  }
+
+  eatFruit(fruit, events) {
+    this.fruits.splice(this.fruits.indexOf(fruit), 1);
+    let def = this.p.fruitTypes[fruit.type];
+    // 阿鴻無敵：吃到風險蔬果不扣分，能量反而增加
+    if (fruit.type === 'risk' && this.effects.ahong) def = { score: 0, energy: this.p.ahongRiskEnergy, risk: 0 };
+    this.score = Math.max(0, this.score + def.score);
+    this.grow += 1;
+    events.push({ type: 'eat', fruit, def });
+    if (this.fruits.length < this.p.fruitCount) {
+      const nf = this.spawnFruit();
+      if (nf && this.effects.weirdo) { nf.orig = nf.type; nf.type = 'risk'; }
+    }
+    this.addBars(def.energy, def.risk, events);
+  }
+
+  // ---------- 基本角色功能 ----------
+  useSkill(skill) {
+    const events = [];
+    if (this.state !== 'playing' || this.skills[skill] < this.p.skillCharges) return events;
+    this.skills[skill] = 0;
+    if (skill === 'dad') {
+      this.effects.magnet = { ms: this.p.magnetSec * 1000, acc: 0 };
+    } else {
+      const removed = this.fruits.filter(f => f.type === 'risk');
+      this.fruits = this.fruits.filter(f => f.type !== 'risk');
+      events.push({ type: 'cleared', removed });
+      while (this.fruits.length < this.p.fruitCount) this.spawnFruit(this.pickWeighted({ normal: 2, safe: 1 }));
+    }
+    events.push({ type: 'skillUsed', skill });
+    return events;
+  }
+
+  nextIconMs() {
+    const { iconMinSec: a, iconMaxSec: b } = this.p;
+    return (a + this.rng() * (b - a)) * 1000;
+  }
+
+  tickIcons(dtMs) {
+    if ((this.iconTimer -= dtMs) > 0) return [];
+    this.iconTimer = this.nextIconMs();
+    // 只為未滿且場上尚無圖示的角色產生圖示
+    const need = ['dad', 'mom'].filter(s => this.skills[s] < this.p.skillCharges && !this.icons.some(i => i.skill === s));
+    if (!need.length) return [];
+    const cells = this.freeCells().filter(c => !this.icons.some(i => i.x === c.x && i.y === c.y));
+    if (!cells.length) return [];
+    const c = cells[Math.floor(this.rng() * cells.length)];
+    const icon = { x: c.x, y: c.y, skill: need[Math.floor(this.rng() * need.length)] };
+    this.icons.push(icon);
+    return [{ type: 'iconSpawn', icon }];
+  }
+
+  // 磁鐵：範圍內蔬果朝蛇頭移動一格，抵達蛇頭即視同吃到
+  tickMagnet(dtMs) {
+    const events = [];
+    const m = this.effects.magnet;
+    if (!m) return events;
+    if ((m.ms -= dtMs) <= 0) {
+      delete this.effects.magnet;
+      events.push({ type: 'effectEnd', kind: 'magnet' });
       return events;
     }
-    events.push({ type: 'move' });
+    m.acc += dtMs;
+    while (m.acc >= this.p.magnetStepMs && this.state === 'playing') {
+      m.acc -= this.p.magnetStepMs;
+      const h = this.head, R = this.p.magnetRadius;
+      for (const f of [...this.fruits]) {
+        const dx = h.x - f.x, dy = h.y - f.y;
+        if (Math.max(Math.abs(dx), Math.abs(dy)) > R) continue;
+        const nx = f.x + (Math.abs(dx) >= Math.abs(dy) ? Math.sign(dx) : 0);
+        const ny = f.y + (Math.abs(dx) >= Math.abs(dy) ? 0 : Math.sign(dy));
+        if (nx === h.x && ny === h.y) { this.eatFruit(f, events); if (this.state !== 'playing') break; continue; }
+        if (this.occupied(nx, ny) || this.icons.some(i => i.x === nx && i.y === ny)) continue;
+        f.x = nx; f.y = ny;
+        events.push({ type: 'fruitMove', fruit: f });
+      }
+    }
     return events;
   }
 
@@ -233,7 +308,8 @@ export class Game {
   }
 
   occupied(x, y) {
-    return this.snake.some(s => s.x === x && s.y === y) || this.fruits.some(f => f.x === x && f.y === y);
+    return this.snake.some(s => s.x === x && s.y === y) || this.fruits.some(f => f.x === x && f.y === y)
+      || (this.icons || []).some(i => i.x === x && i.y === y);
   }
 
   freeCells() {

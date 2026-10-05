@@ -27,6 +27,14 @@ export const DEFAULT_PARAMS = {
   aciExtraSafe: 3,        // 阿慈：額外增加之標章蔬果數（暫定）
   ahongSec: 4,            // 阿鴻：無敵秒數（規範書 3–5 秒）
   ahongRiskEnergy: 1,     // 阿鴻無敵期間吃到風險蔬果之能量增加值
+
+  // 基本角色功能（爸爸／媽媽常駐按鈕）
+  skillCharges: 2,        // 使用後須吃到對應圖示的次數才回滿
+  iconMinSec: 10,         // 充能圖示出現間隔（規範書約 10–15 秒）
+  iconMaxSec: 15,
+  magnetSec: 5,           // 爸爸磁鐵持續秒數（暫定）
+  magnetRadius: 3,        // 磁鐵吸引範圍（格，暫定）
+  magnetStepMs: 150,      // 蔬果被吸引時每移動一格的毫秒數
 };
 
 export function cloneParams(p = DEFAULT_PARAMS) {
