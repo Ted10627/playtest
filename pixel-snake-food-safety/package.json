@@ -1,0 +1,19 @@
+{
+  "name": "pixel-snake-food-safety",
+  "private": true,
+  "version": "0.1.0",
+  "description": "食在安心—像素大冒險 遊戲功能展示 Demo",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test \"src/logic/*.test.js\""
+  },
+  "dependencies": {
+    "phaser": "^3.90.0"
+  },
+  "devDependencies": {
+    "vite": "^8.3.2"
+  }
+}
